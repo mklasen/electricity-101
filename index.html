@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Electricity — From Zero to Hero</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+body { font-family: 'Inter', sans-serif; }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #1e293b; }
+::-webkit-scrollbar-thumb { background: #fbbf24; border-radius: 3px; }
+
+/* Electron particle */
+.electron {
+  width: 14px; height: 14px;
+  background: radial-gradient(circle, #60a5fa, #2563eb);
+  border-radius: 50%;
+  position: absolute;
+  box-shadow: 0 0 8px #3b82f6, 0 0 16px #3b82f680;
+  pointer-events: none;
+}
+
+/* Proton */
+.proton {
+  width: 20px; height: 20px;
+  background: radial-gradient(circle, #f87171, #dc2626);
+  border-radius: 50%;
+  position: absolute;
+  box-shadow: 0 0 8px #ef4444;
+}
+
+/* Nucleus */
+.nucleus {
+  width: 50px; height: 50px;
+  background: radial-gradient(circle, #fbbf24, #f59e0b, #d97706);
+  border-radius: 50%;
+  box-shadow: 0 0 20px #f59e0b80, 0 0 40px #f59e0b40;
+}
+
+/* Wire path */
+.wire {
+  stroke: #94a3b8;
+  stroke-width: 6;
+  fill: none;
+  stroke-linecap: round;
+}
+.wire-glow {
+  stroke: #fbbf2440;
+  stroke-width: 12;
+  fill: none;
+  stroke-linecap: round;
+}
+
+/* Sim canvas */
+.sim-canvas {
+  background: #0f172a;
+  border: 2px solid #334155;
+  border-radius: 12px;
+}
+
+/* Level card */
+.level-card {
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+.level-card:hover { transform: translateY(-2px); }
+.level-card.locked { opacity: 0.5; pointer-events: none; }
+.level-card.completed { border-color: #22c55e !important; }
+.level-card.active { border-color: #fbbf24 !important; box-shadow: 0 0 20px #fbbf2430; }
+
+/* Quiz option */
+.quiz-option {
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.quiz-option:hover { background: #334155; border-color: #fbbf24; }
+.quiz-option.correct { background: #166534 !important; border-color: #22c55e !important; }
+.quiz-option.wrong { background: #7f1d1d !important; border-color: #ef4444 !important; }
+
+/* Slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  height: 8px;
+  background: #334155;
+  border-radius: 4px;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px; height: 22px;
+  background: #fbbf24;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px #fbbf2480;
+}
+
+/* XP bar */
+.xp-fill {
+  transition: width 0.6s ease;
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+}
+
+/* Pulse animation */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px currentColor; }
+  50% { box-shadow: 0 0 20px currentColor, 0 0 40px currentColor; }
+}
+.pulse-glow { animation: pulse-glow 2s infinite; }
+
+/* Battery */
+.battery {
+  width: 60px; height: 100px;
+  border: 3px solid #94a3b8;
+  border-radius: 6px;
+  position: relative;
+}
+.battery::before {
+  content: '';
+  position: absolute;
+  top: -8px; left: 50%;
+  transform: translateX(-50%);
+  width: 24px; height: 8px;
+  background: #94a3b8;
+  border-radius: 3px 3px 0 0;
+}
+
+/* Lightbulb */
+.bulb { transition: all 0.3s; }
+.bulb.on {
+  filter: drop-shadow(0 0 10px #fbbf24) drop-shadow(0 0 20px #fbbf2480);
+}
+
+/* Resistor zigzag via SVG inline */
+.drag-electron {
+  width: 28px; height: 28px;
+  background: radial-gradient(circle, #60a5fa, #2563eb);
+  border-radius: 50%;
+  box-shadow: 0 0 12px #3b82f6;
+  cursor: grab;
+  position: absolute;
+  z-index: 10;
+  touch-action: none;
+}
+.drag-electron:active { cursor: grabbing; }
+
+/* Floating label */
+.float-label {
+  animation: float 3s ease-in-out infinite;
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* Toast */
+.toast {
+  animation: slideUp 0.4s ease, fadeOut 0.4s ease 2.6s forwards;
+}
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes fadeOut { to { opacity: 0; transform: translateY(-10px); } }
+</style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen overflow-x-hidden">
+
+<!-- Top bar -->
+<header class="fixed top-0 w-full z-50 bg-slate-900/95 backdrop-blur border-b border-slate-700/50">
+  <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">⚡</span>
+      <span class="font-bold text-lg hidden sm:inline">Electricity 101</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="text-sm text-amber-400 font-semibold" id="xp-display">0 XP</div>
+      <div class="w-32 h-3 bg-slate-700 rounded-full overflow-hidden">
+        <div class="xp-fill h-full rounded-full" id="xp-bar" style="width:0%"></div>
+      </div>
+      <div class="text-sm font-bold text-slate-400">Lv <span id="player-level">1</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- Toast container -->
+<div id="toast-container" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2"></div>
+
+<!-- Main content -->
+<main class="pt-20 pb-16 max-w-5xl mx-auto px-4">
+
+  <!-- Hero -->
+  <section class="text-center py-12">
+    <h1 class="text-4xl sm:text-5xl font-black mb-4 bg-gradient-to-r from-amber-400 to-yellow-200 bg-clip-text text-transparent">
+      Learn Electricity
+    </h1>
+    <p class="text-slate-400 text-lg max-w-xl mx-auto">From atoms to circuits — interactive, visual, and fun. Complete each level to unlock the next.</p>
+  </section>
+
+  <!-- Level map -->
+  <section class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-12" id="level-map"></section>
+
+  <!-- Level content area -->
+  <section id="level-content" class="hidden">
+    <div id="level-inner"></div>
+  </section>
+
+</main>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────
+const state = {
+  xp: 0,
+  level: 1,
+  unlockedLevels: [0],
+  completedLevels: [],
+  currentLevel: null,
+};
+
+function save() { localStorage.setItem('elec101', JSON.stringify(state)); }
+function load() {
+  const s = localStorage.getItem('elec101');
+  if (s) Object.assign(state, JSON.parse(s));
+}
+load();
+
+// ─── XP System ───────────────────────────────────────────────────
+function addXP(amount) {
+  state.xp += amount;
+  const needed = state.level * 100;
+  if (state.xp >= needed) {
+    state.xp -= needed;
+    state.level++;
+    toast(`Level Up! You're now level ${state.level}`, '🎉');
+    confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
+  }
+  updateHUD();
+  save();
+}
+
+function updateHUD() {
+  $('#xp-display').text(state.xp + ' XP');
+  $('#player-level').text(state.level);
+  const pct = (state.xp / (state.level * 100)) * 100;
+  $('#xp-bar').css('width', pct + '%');
+}
+
+function toast(msg, icon = '⚡') {
+  const el = $(`<div class="toast bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-sm flex items-center gap-2 shadow-lg">
+    <span class="text-lg">${icon}</span><span>${msg}</span></div>`);
+  $('#toast-container').append(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+function completeLevel(idx) {
+  if (!state.completedLevels.includes(idx)) {
+    state.completedLevels.push(idx);
+    addXP(50);
+    toast(`Level ${idx + 1} complete! +50 XP`, '✅');
+  }
+  if (!state.unlockedLevels.includes(idx + 1) && idx + 1 < levels.length) {
+    state.unlockedLevels.push(idx + 1);
+  }
+  save();
+  renderMap();
+}
+
+// ─── Levels Definition ──────────────────────────────────────────
+const levels = [
+  { title: 'Atoms & Charge', icon: '⚛️', desc: 'What everything is made of' },
+  { title: 'Voltage', icon: '🔋', desc: 'Electrical pressure' },
+  { title: 'Current', icon: '🌊', desc: 'The flow of electrons' },
+  { title: 'Resistance', icon: '🚧', desc: 'What slows the flow' },
+  { title: "Ohm's Law", icon: '📐', desc: 'V = I × R' },
+  { title: 'Circuits', icon: '🔌', desc: 'Series & parallel' },
+  { title: 'Power', icon: '💡', desc: 'Energy in action' },
+  { title: 'AC vs DC', icon: '〰️', desc: 'Two kinds of current' },
+];
+
+// ─── Render Level Map ────────────────────────────────────────────
+function renderMap() {
+  const $map = $('#level-map').empty();
+  levels.forEach((lv, i) => {
+    const completed = state.completedLevels.includes(i);
+    const unlocked = state.unlockedLevels.includes(i);
+    const cls = completed ? 'completed' : (unlocked ? 'active' : 'locked');
+    $map.append(`
+      <div class="level-card ${cls} bg-slate-800 border-2 border-slate-600 rounded-xl p-4 text-center" data-level="${i}">
+        <div class="text-3xl mb-2">${lv.icon}</div>
+        <div class="font-bold text-sm">${lv.title}</div>
+        <div class="text-xs text-slate-400 mt-1">${lv.desc}</div>
+        ${completed ? '<div class="text-green-400 text-xs mt-2 font-semibold">✓ Complete</div>' : ''}
+        ${!unlocked ? '<div class="text-slate-500 text-xs mt-2">🔒 Locked</div>' : ''}
+      </div>
+    `);
+  });
+
+  $('.level-card:not(.locked)').on('click', function() {
+    const idx = $(this).data('level');
+    openLevel(idx);
+  });
+}
+
+// ─── Open a Level ────────────────────────────────────────────────
+function openLevel(idx) {
+  state.currentLevel = idx;
+  $('#level-content').show();
+  const renderer = levelRenderers[idx];
+  if (renderer) renderer($('#level-inner').empty());
+  $('html, body').animate({ scrollTop: $('#level-content').offset().top - 80 }, 400);
+}
+
+// ─── Quiz Helper ─────────────────────────────────────────────────
+function renderQuiz($el, questions, levelIdx) {
+  let qIdx = 0;
+  let score = 0;
+
+  function showQ() {
+    const q = questions[qIdx];
+    $el.empty().append(`
+      <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-6 max-w-lg mx-auto">
+        <div class="text-xs text-amber-400 mb-2 font-semibold">Question ${qIdx + 1} of ${questions.length}</div>
+        <div class="font-semibold text-lg mb-4">${q.q}</div>
+        <div class="space-y-2" id="quiz-options"></div>
+      </div>
+    `);
+    q.opts.forEach((opt, oi) => {
+      $('#quiz-options').append(`<div class="quiz-option border border-slate-600 rounded-lg px-4 py-3 text-sm" data-idx="${oi}">${opt}</div>`);
+    });
+    $('.quiz-option').on('click', function() {
+      if ($(this).hasClass('correct') || $(this).hasClass('wrong')) return;
+      const picked = $(this).data('idx');
+      $('.quiz-option').each(function() {
+        if ($(this).data('idx') === q.answer) $(this).addClass('correct');
+        else if ($(this).data('idx') === picked) $(this).addClass('wrong');
+      });
+      if (picked === q.answer) {
+        score++;
+        addXP(10);
+        toast('+10 XP!', '⭐');
+      }
+      setTimeout(() => {
+        qIdx++;
+        if (qIdx < questions.length) showQ();
+        else showResults();
+      }, 1200);
+    });
+  }
+
+  function showResults() {
+    const pct = Math.round((score / questions.length) * 100);
+    const passed = pct >= 50;
+    $el.empty().append(`
+      <div class="text-center py-8">
+        <div class="text-5xl mb-4">${passed ? '🏆' : '🔄'}</div>
+        <div class="text-2xl font-bold mb-2">${pct}% — ${passed ? 'Passed!' : 'Try again!'}</div>
+        <p class="text-slate-400 mb-4">You got ${score} out of ${questions.length} correct.</p>
+        ${passed
+          ? `<button class="bg-green-600 hover:bg-green-500 text-white font-bold px-6 py-3 rounded-lg" id="quiz-next">Continue →</button>`
+          : `<button class="bg-amber-600 hover:bg-amber-500 text-white font-bold px-6 py-3 rounded-lg" id="quiz-retry">Retry Quiz</button>`
+        }
+      </div>
+    `);
+    if (passed) {
+      confetti({ particleCount: 50, spread: 60 });
+      $('#quiz-next').on('click', () => {
+        completeLevel(levelIdx);
+        if (levelIdx + 1 < levels.length) openLevel(levelIdx + 1);
+        else {
+          $el.empty().append(`<div class="text-center py-12"><div class="text-5xl mb-4">🎓</div><div class="text-2xl font-bold">You've completed all levels!</div><p class="text-slate-400 mt-2">You now understand the fundamentals of electricity.</p></div>`);
+          completeLevel(levelIdx);
+        }
+      });
+    } else {
+      $('#quiz-retry').on('click', () => { qIdx = 0; score = 0; showQ(); });
+    }
+  }
+  showQ();
+}
+
+// ─── Level Renderers ─────────────────────────────────────────────
+const levelRenderers = [];
+
+// ── LEVEL 0: Atoms & Charge ──────────────────────────────────────
+levelRenderers[0] = function($el) {
+  $el.html(`
+    <div class="mb-6 flex items-center justify-between">
+      <h2 class="text-2xl font-bold">⚛️ Atoms & Charge</h2>
+      <button class="text-sm text-slate-400 hover:text-white" onclick="$('#level-content').hide()">✕ Close</button>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6 mb-8">
+      <div>
+        <h3 class="font-semibold text-amber-400 mb-2">Everything is made of atoms</h3>
+        <p class="text-slate-300 text-sm leading-relaxed mb-3">
+          Imagine a tiny solar system. In the center: the <strong class="text-red-400">nucleus</strong> (protons + neutrons).
+          Orbiting around it: <strong class="text-blue-400">electrons</strong>.
+        </p>
+        <ul class="text-sm text-slate-400 space-y-2">
+          <li><span class="text-red-400 font-bold">Protons (+)</span> — positive charge, stay in the nucleus</li>
+          <li><span class="text-blue-400 font-bold">Electrons (−)</span> — negative charge, orbit the nucleus</li>
+          <li>Opposites attract: + pulls on −</li>
+          <li><strong class="text-amber-300">Key insight:</strong> Electrons can be <em>pushed</em> from atom to atom. That movement IS electricity.</li>
+        </ul>
+      </div>
+      <div class="flex justify-center items-center">
+        <canvas id="atom-canvas" width="280" height="280" class="sim-canvas"></canvas>
+      </div>
+    </div>
+
+    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5 mb-8">
+      <h3 class="font-semibold text-amber-400 mb-3">🎮 Try it: Knock an electron loose!</h3>
+      <p class="text-sm text-slate-400 mb-3">Click on an orbiting electron to knock it free. This is how electricity starts — by freeing electrons so they can flow!</p>
+      <div class="text-center text-sm text-slate-500" id="atom-hint">Click a blue electron!</div>
+      <div class="text-center mt-2 text-sm font-semibold text-green-400 hidden" id="atom-success">
+        🎉 You freed an electron! Free electrons can move between atoms — this is electric current.
+      </div>
+    </div>
+
+    <div id="quiz-area-0"></div>
+  `);
+
+  // Atom simulation
+  const canvas = document.getElementById('atom-canvas');
+  const ctx = canvas.getContext('2d');
+  const cx = 140, cy = 140;
+  const electrons = [
+    { angle: 0, radius: 70, speed: 0.02, freed: false },
+    { angle: 2.1, radius: 70, speed: 0.02, freed: false },
+    { angle: 0.5, radius: 110, speed: 0.013, freed: false },
+    { angle: 3.5, radius: 110, speed: 0.013, freed: false },
+  ];
+  let freedCount = 0;
+  let freedElectrons = [];
+
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    electrons.forEach(el => {
+      if (el.freed) return;
+      const ex = cx + Math.cos(el.angle) * el.radius;
+      const ey = cy + Math.sin(el.angle) * el.radius;
+      if (Math.hypot(mx - ex, my - ey) < 18) {
+        el.freed = true;
+        freedCount++;
+        freedElectrons.push({ x: ex, y: ey, vx: (Math.random() - 0.5) * 3, vy: (Math.random() - 0.5) * 3, life: 120 });
+        if (freedCount === 1) {
+          $('#atom-hint').hide();
+          $('#atom-success').removeClass('hidden');
+          addXP(10);
+          toast('Electron freed! +10 XP', '⚡');
+        }
+      }
+    });
+  });
+
+  function drawAtom() {
+    ctx.clearRect(0, 0, 280, 280);
+
+    // Orbit rings
+    [70, 110].forEach(r => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    // Nucleus
+    const grad = ctx.createRadialGradient(cx, cy, 5, cx, cy, 22);
+    grad.addColorStop(0, '#fbbf24');
+    grad.addColorStop(1, '#b45309');
+    ctx.beginPath();
+    ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText('+', cx, cy + 4);
+
+    // Orbiting electrons
+    electrons.forEach(el => {
+      if (el.freed) return;
+      el.angle += el.speed;
+      const ex = cx + Math.cos(el.angle) * el.radius;
+      const ey = cy + Math.sin(el.angle) * el.radius;
+      const eg = ctx.createRadialGradient(ex, ey, 1, ex, ey, 8);
+      eg.addColorStop(0, '#93c5fd');
+      eg.addColorStop(1, '#2563eb');
+      ctx.beginPath();
+      ctx.arc(ex, ey, 8, 0, Math.PI * 2);
+      ctx.fillStyle = eg;
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 9px Inter';
+      ctx.fillText('−', ex, ey + 3);
+    });
+
+    // Freed electrons drifting
+    freedElectrons = freedElectrons.filter(fe => {
+      fe.x += fe.vx;
+      fe.y += fe.vy;
+      fe.life--;
+      ctx.globalAlpha = fe.life / 120;
+      ctx.beginPath();
+      ctx.arc(fe.x, fe.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#60a5fa';
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      return fe.life > 0;
+    });
+
+    requestAnimationFrame(drawAtom);
+  }
+  drawAtom();
+
+  // Quiz
+  setTimeout(() => {
+    renderQuiz($('#quiz-area-0'), [
+      { q: 'What particle carries a negative charge?', opts: ['Proton', 'Electron', 'Neutron', 'Photon'], answer: 1 },
+      { q: 'What happens when electrons move from atom to atom?', opts: ['Nothing', 'Gravity', 'Electric current', 'Heat only'], answer: 2 },
+      { q: 'Where do protons live?', opts: ['Orbiting outside', 'In the nucleus', 'Floating freely', 'In the wires'], answer: 1 },
+    ], 0);
+  }, 200);
+};
+
+// ── LEVEL 1: Voltage ─────────────────────────────────────────────
+levelRenderers[1] = function($el) {
+  $el.html(`
+    <div class="mb-6 flex items-center justify-between">
+      <h2 class="text-2xl font-bold">🔋 Voltage</h2>
+      <button class="text-sm text-slate-400 hover:text-white" onclick="$('#level-content').hide()">✕ Close</button>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6 mb-8">
+      <div>
+        <h3 class="font-semibold text-amber-400 mb-2">Voltage = Electrical Pressure</h3>
+        <p class="text-slate-300 text-sm leading-relaxed mb-3">
+          Think of a water tank. The <strong class="text-amber-300">higher the tank</strong>, the more pressure pushes water down the pipe.
+          Voltage is the same thing for electrons.
+        </p>
+        <ul class="text-sm text-slate-400 space-y-2">
+          <li><strong class="text-amber-300">Voltage (V)</strong> — measured in <em>Volts</em></li>
+          <li>A battery creates voltage by having <span class="text-red-400">+ charge</span> on one side and <span class="text-blue-400">− charge</span> on the other</li>
+          <li>Higher voltage = more push on the electrons</li>
+          <li>A AA battery = 1.5V. A wall outlet = ~120V or 230V. Lightning = ~300 million V!</li>
+        </ul>
+      </div>
+      <div>
+        <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+          <h4 class="font-semibold text-sm mb-3">🎮 Water Tank Analogy</h4>
+          <p class="text-xs text-slate-400 mb-3">Drag the slider to change the "water height" (voltage). Watch the flow speed change!</p>
+          <canvas id="voltage-canvas" width="320" height="200" class="sim-canvas w-full mb-3"></canvas>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-400">Low</span>
+            <input type="range" min="1" max="10" value="5" id="voltage-slider" class="flex-1">
+            <span class="text-xs text-slate-400">High</span>
+          </div>
+          <div class="text-center text-amber-400 font-bold mt-2" id="voltage-val">5V</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="quiz-area-1"></div>
+  `);
+
+  const canvas = document.getElementById('voltage-canvas');
+  const ctx = canvas.getContext('2d');
+  let voltage = 5;
+  let particles = [];
+  for (let i = 0; i < 30; i++) {
+    particles.push({ x: Math.random() * 320, y: 100 + Math.random() * 80, speed: Math.random() * 2 + 1 });
+  }
+
+  $('#voltage-slider').on('input', function() {
+    voltage = +this.value;
+    $('#voltage-val').text(voltage + 'V');
+  });
+
+  function drawVoltage() {
+    ctx.clearRect(0, 0, 320, 200);
+
+    // Tank
+    const tankHeight = 30 + voltage * 14;
+    ctx.fillStyle = '#1e3a5f';
+    ctx.fillRect(10, 200 - tankHeight, 60, tankHeight);
+    ctx.strokeStyle = '#60a5fa';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(10, 200 - tankHeight, 60, tankHeight);
+
+    // Water
+    ctx.fillStyle = '#2563eb80';
+    ctx.fillRect(12, 200 - tankHeight + 2, 56, tankHeight - 4);
+
+    // Pipe
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(70, 160, 240, 20);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(70, 165, 240, 10);
+
+    // Particles (electrons/water)
+    const speed = voltage * 0.5;
+    particles.forEach(p => {
+      p.x += speed;
+      if (p.x > 320) p.x = 80;
+      ctx.beginPath();
+      ctx.arc(p.x, 170, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#60a5fa';
+      ctx.fill();
+    });
+
+    // Labels
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '11px Inter';
+    ctx.fillText('Tank', 22, 200 - tankHeight - 5);
+    ctx.fillText('(Battery)', 15, 200 - tankHeight + (voltage < 3 ? -18 : 15));
+
+    requestAnimationFrame(drawVoltage);
+  }
+  drawVoltage();
+
+  setTimeout(() => {
+    renderQuiz($('#quiz-area-1'), [
+      { q: 'Voltage is like...', opts: ['Water speed', 'Water pressure/height', 'Pipe width', 'Water color'], answer: 1 },
+      { q: 'What unit measures voltage?', opts: ['Amps', 'Ohms', 'Volts', 'Watts'], answer: 2 },
+      { q: 'A higher voltage means...', opts: ['Less electron push', 'More electron push', 'No change', 'Fewer electrons'], answer: 1 },
+    ], 1);
+  }, 200);
+};
+
+// ── LEVEL 2: Current ─────────────────────────────────────────────
+levelRenderers[2] = function($el) {
+  $el.html(`
+    <div class="mb-6 flex items-center justify-between">
+      <h2 class="text-2xl font-bold">🌊 Current</h2>
+      <button class="text-sm text-slate-400 hover:text-white" onclick="$('#level-content').hide()">✕ Close</button>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6 mb-8">
+      <div>
+        <h3 class="font-semibold text-amber-400 mb-2">Current = Flow of Electrons</h3>
+        <p class="text-slate-300 text-sm leading-relaxed mb-3">
+          If voltage is the <em>pressure</em>, current is the <em>actual flow</em>. It's how many electrons pass a point per second.
+        </p>
+        <ul class="text-sm text-slate-400 space-y-2">
+          <li><strong class="text-amber-300">Current (I)</strong> — measured in <em>Amps</em> (A)</li>
+          <li>Think: how much water actually flows through the pipe per second</li>
+          <li>1 Amp = ~6.2 billion billion electrons per second (6.2 × 10¹⁸)</li>
+          <li>A phone charger uses ~1-2A. An electric stove: ~30-50A</li>
+        </ul>
+      </div>
+      <div>
+        <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+          <h4 class="font-semibold text-sm mb-3">🎮 Watch the current flow</h4>
+          <p class="text-xs text-slate-400 mb-3">Adjust voltage and pipe width. See how current changes!</p>
+          <canvas id="current-canvas" width="320" height="180" class="sim-canvas w-full mb-3"></canvas>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <div class="text-xs text-slate-400 mb-1">Voltage (pressure)</div>
+              <input type="range" min="1" max="10" value="5" id="cur-voltage" class="w-full">
+            </div>
+            <div>
+              <div class="text-xs text-slate-400 mb-1">Pipe width (conductivity)</div>
+              <input type="range" min="1" max="10" value="5" id="cur-pipe" class="w-full">
+            </div>
+          </div>
+          <div class="text-center mt-2 text-lg font-bold text-blue-400" id="current-val">Current: 2.5A</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="quiz-area-2"></div>
+  `);
+
+  const canvas = document.getElementById('current-canvas');
+  const ctx = canvas.getContext('2d');
+  let dots = [];
+  for (let i = 0; i < 50; i++) dots.push({ x: Math.random() * 320, yOff: (Math.random() - 0.5) * 30 });
+
+  function draw() {
+    const v = +$('#cur-voltage').val();
+    const p = +$('#cur-pipe').val();
+    const current = (v * p / 10).toFixed(1);
+    $('#current-val').text(`Current: ${current}A`);
+
+    ctx.clearRect(0, 0, 320, 180);
+    const pipeH = 10 + p * 6;
+    const pipeY = 90 - pipeH / 2;
+
+    // Battery
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(0, 60, 30, 60);
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(5, 65, 20, 12);
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(5, 103, 20, 12);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10px Inter';
+    ctx.fillText('+', 11, 75);
+    ctx.fillText('−', 12, 113);
+
+    // Pipe
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(30, pipeY, 260, pipeH);
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(30, pipeY, 260, pipeH);
+
+    // Bulb icon at end
+    ctx.beginPath();
+    ctx.arc(305, 90, 15, 0, Math.PI * 2);
+    ctx.fillStyle = current > 3 ? '#fbbf24' : (current > 1 ? '#92400e' : '#334155');
+    ctx.fill();
+    ctx.strokeStyle = '#94a3b8';
+    ctx.stroke();
+
+    // Electrons
+    const speed = v * 0.6;
+    dots.forEach(d => {
+      d.x += speed;
+      if (d.x > 290) d.x = 35;
+      const dy = 90 + d.yOff * (pipeH / 60);
+      if (dy > pipeY + 4 && dy < pipeY + pipeH - 4) {
+        ctx.beginPath();
+        ctx.arc(d.x, dy, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#60a5fa';
+        ctx.fill();
+      }
+    });
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+  setTimeout(() => {
+    renderQuiz($('#quiz-area-2'), [
+      { q: 'Current is measured in...', opts: ['Volts', 'Watts', 'Amps', 'Ohms'], answer: 2 },
+      { q: 'Current is like...', opts: ['Water pressure', 'Amount of water flowing', 'Pipe material', 'Tank size'], answer: 1 },
+      { q: 'More voltage with same resistance means...', opts: ['Less current', 'Same current', 'More current', 'No current'], answer: 2 },
+    ], 2);
+  }, 200);
+};
+
+// ── LEVEL 3: Resistance ──────────────────────────────────────────
+levelRenderers[3] = function($el) {
+  $el.html(`
+    <div class="mb-6 flex items-center justify-between">
+      <h2 class="text-2xl font-bold">🚧 Resistance</h2>
+      <button class="text-sm text-slate-400 hover:text-white" onclick="$('#level-content').hide()">✕ Close</button>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6 mb-8">
+      <div>
+        <h3 class="font-semibold text-amber-400 mb-2">Resistance = What Slows the Flow</h3>
+        <p class="text-slate-300 text-sm leading-relaxed mb-3">
+          Imagine squeezing a water hose — less water gets through. That squeeze is <strong>resistance</strong>.
+        </p>
+        <ul class="text-sm text-slate-400 space-y-2">
+          <li><strong class="text-amber-300">Resistance (R)</strong> — measured in <em>Ohms (Ω)</em></li>
+          <li>Materials with low resistance: copper, silver, gold (conductors)</li>
+          <li>Materials with high resistance: rubber, glass, air (insulators)</li>
+          <li>Resistors convert electrical energy to <strong>heat</strong></li>
+          <li>This is why your phone gets warm when charging!</li>
+        </ul>
+      </div>
+      <div>
+        <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+          <h4 class="font-semibold text-sm mb-3">🎮 Squeeze the pipe!</h4>
+          <p class="text-xs text-slate-400 mb-3">Drag resistance up to see how it slows the flow.</p>
+          <canvas id="resist-canvas" width="320" height="180" class="sim-canvas w-full mb-3"></canvas>
+          <div>
+            <div class="text-xs text-slate-400 mb-1">Resistance</div>
+            <input type="range" min="1" max="10" value="3" id="resist-slider" class="w-full">
+          </div>
+          <div class="flex justify-between mt-2">
+            <div class="text-sm text-blue-400 font-bold" id="resist-flow">Flow: fast</div>
+            <div class="text-sm text-red-400 font-bold" id="resist-heat">Heat: low</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="quiz-area-3"></div>
+  `);
+
+  const canvas = document.getElementById('resist-canvas');
+  const ctx = canvas.getContext('2d');
+  let dots = [];
+  for (let i = 0; i < 40; i++) dots.push({ x: Math.random() * 320, yOff: (Math.random() - 0.5) });
+
+  function draw() {
+    const r = +$('#resist-slider').val();
+    const narrowW = Math.max(6, 50 - r * 5);
+    const speed = Math.max(0.3, 4 - r * 0.35);
+    const heat = r > 7 ? 'HIGH' : (r > 4 ? 'medium' : 'low');
+    $('#resist-flow').text(`Flow: ${speed > 2.5 ? 'fast' : (speed > 1.5 ? 'medium' : 'slow')}`);
+    $('#resist-heat').text(`Heat: ${heat}`);
+
+    ctx.clearRect(0, 0, 320, 180);
+
+    // Wide pipe
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(0, 60, 120, 60);
+    ctx.fillRect(200, 60, 120, 60);
+
+    // Narrow section (resistor)
+    const ny = 90 - narrowW / 2;
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(120, ny, 80, narrowW);
+
+    // Resistor symbol
+    ctx.strokeStyle = r > 7 ? '#ef4444' : '#94a3b8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(120, ny); ctx.lineTo(200, ny);
+    ctx.moveTo(120, ny + narrowW); ctx.lineTo(200, ny + narrowW);
+    ctx.stroke();
+
+    // Heat glow
+    if (r > 4) {
+      ctx.fillStyle = `rgba(239, 68, 68, ${(r - 4) * 0.05})`;
+      ctx.fillRect(120, ny - 10, 80, narrowW + 20);
+    }
+
+    // Zigzag symbol
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(130, 90);
+    for (let i = 0; i < 6; i++) {
+      ctx.lineTo(135 + i * 10, i % 2 === 0 ? 78 : 102);
+    }
+    ctx.lineTo(190, 90);
+    ctx.stroke();
+
+    // Electrons
+    dots.forEach(d => {
+      d.x += (d.x > 120 && d.x < 200) ? speed * 0.5 : speed;
+      if (d.x > 320) d.x = 0;
+      const inNarrow = d.x > 120 && d.x < 200;
+      const pipeH = inNarrow ? narrowW : 60;
+      const pipeY = inNarrow ? ny : 60;
+      const dy = pipeY + pipeH / 2 + d.yOff * (pipeH * 0.4);
+      ctx.beginPath();
+      ctx.arc(d.x, dy, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#60a5fa';
+      ctx.fill();
+    });
+
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 60, 120, 60);
+    ctx.strokeRect(200, 60, 120, 60);
+    ctx.strokeRect(120, ny, 80, narrowW);
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+
+  setTimeout(() => {
+    renderQuiz($('#quiz-area-3'), [
+      { q: 'Resistance is measured in...', opts: ['Volts', 'Amps', 'Ohms', 'Watts'], answer: 2 },
+      { q: 'A material with HIGH resistance is called a...', opts: ['Conductor', 'Insulator', 'Capacitor', 'Transistor'], answer: 1 },
+      { q: 'Resistance converts electrical energy into...', opts: ['Light only', 'Sound', 'Heat', 'More electrons'], answer: 2 },
+    ], 3);
+  }, 200);
+};
+
+// ── LEVEL 4: Ohm's Law ──────────────────────────────────────────
+levelRenderers[4] = function($el) {
+  $el.html(`
+    <div class="mb-6 flex items-center justify-between">
+      <h2 class="text-2xl font-bold">📐 Ohm's Law</h2>
+      <button class="text-sm text-slate-400 hover:text-white" onclick="$('#level-content').hide()">✕ Close</button>
+    </div>
+
+    <div class="text-center mb-8">
+      <div class="inline-block bg-slate-800 border-2 border-amber-500/50 rounded-2xl px-8 py-6">
+        <div class="text-4xl font-black text-amber-400 mb-2">V = I × R</div>
+        <div class="text-sm text-slate-400">Voltage = Current × Resistance</div>
+      </div>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-4 mb-8">
+      <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4 text-center">
+        <div class="text-3xl mb-2">🔋</div>
+        <div class="font-bold text-amber-400">V (Voltage)</div>
+        <div class="text-xs text-slate-400">The push</div>
+      </div>
+      <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4 text-center">
+        <div class="text-3xl mb-2">🌊</div>
+        <div class="font-bold text-blue-400">I (Current)</div>
+        <div class="text-xs text-slate-400">The flow</div>
+      </div>
+      <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-4 text-center">
+        <div class="text-3xl mb-2">🚧</div>
+        <div class="font-bold text-red-400">R (Resistance)</div>
+        <div class="text-xs text-slate-400">The obstacle</div>
+      </div>
+    </div>
+
+    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5 mb-8">
+      <h3 class="font-semibold text-amber-400 mb-3">🎮 Ohm's Law Calculator</h3>
+      <p class="text-xs text-slate-400 mb-4">Set any TWO values and the third is calculated automatically.</p>
+      <div class="grid grid-cols-3 gap-4 mb-4">
+        <div>
+          <label class="text-xs text-slate-400 block mb-1">Voltage (V)</label>
+          <input type="number" id="ohm-v" class="w-full bg-slate-700 rounded px-3 py-2 text-amber-400 font-bold" value="12">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400 block mb-1">Current (A)</label>
+          <input type="number" id="ohm-i" class="w-full bg-slate-700 rounded px-3 py-2 text-blue-400 font-bold" value="2">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400 block mb-1">Resistance (Ω)</label>
+          <input type="number" id="ohm-r" class="w-full bg-slate-700 rounded px-3 py-2 text-red-400 font-bold" value="6">
+        </div>
+      </div>
+      <div class="flex gap-2 justify-center">
+        <button class="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded text-sm font-bold" id="calc-v">Calc V</button>
+        <button class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm font-bold" id="calc-i">Calc I</button>
+        <button class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded text-sm font-bold" id="calc-r">Calc R</button>
+      </div>
+      <div class="text-center mt-3 text-sm text-slate-300" id="ohm-result"></div>
+    </div>
+
+    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5 mb-8">
+      <h3 class="font-semibold text-amber-400 mb-3">🎮 Live Circuit Sim</h3>
+      <canvas id="ohm-canvas" width="400" height="200" class="sim-canvas w-full mb-3"></canvas>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="text-xs text-slate-400 mb-1">Voltage: <span id="ohm-sv">6</span>V</div>
+          <input type="range" min="1" max="12" value="6" id="ohm-sv-slider" class="w-full">
+        </div>
+        <div>
+          <div class="text-xs text-slate-400 mb-1">Resistance: <span id="ohm-sr">4</span>Ω</div>
+          <input type="range" min="1" max="12" value="4" id="ohm-sr-slider" class="w-full">
+        </div>
+      </div>
+      <div class="text-center mt-2 font-bold text-blue-400 text-lg" id="ohm-si">Current: 1.5A</div>
+    </div>
+
+    <div id="quiz-area-4"></div>
+  `);
+
+  $('#calc-v').click(() => {
+    const i = +$('#ohm-i').val(), r = +$('#ohm-r').val();
+    const v = (i * r).toFixed(2);
+    $('#ohm-v').val(v);
+    $('#ohm-result').html(`V = I × R = ${i} × ${r} = <strong class="text-amber-400">${v}V</strong>`);
+  });
+  $('#calc-i').click(() => {
+    const v = +$('#ohm-v').val(), r = +$('#ohm-r').val();
+    const i = (v / r).toFixed(2);
+    $('#ohm-i').val(i);
+    $('#ohm-result').html(`I = V / R = ${v} / ${r} = <strong class="text-blue-400">${i}A</strong>`);
+  });
+  $('#calc-r').click(() => {
+    const v = +$('#ohm-v').val(), i = +$('#ohm-i').val();
+    const r = (v / i).toFixed(2);
+    $('#ohm-r').val(r);
+    $('#ohm-result').html(`R = V / I = ${v} / ${i} = <strong class="text-red-400">${r}Ω</strong>`);
+  });
+
+  // Live sim
+  const canvas = document.getElementById('ohm-canvas');
+  const ctx = canvas.getContext('2d');
+  let dots = [];
+  for (let i = 0; i < 40; i++) dots.push({ t: Math.random() });
+
+  function draw() {
+    const v = +$('#ohm-sv-slider').val();
+    const r = +$('#ohm-sr-slider').val();
+    const current = v / r;
+    $('#ohm-sv').text(v);
+    $('#ohm-sr').text(r);
+    $('#ohm-si').text(`Current: ${current.toFixed(2)}A`);
+
+    ctx.clearRect(0, 0, 400, 200);
+
+    // Circuit path
+    const path = [
+      [40, 100], [40, 30], [360, 30], [360, 100], [360, 170], [40, 170], [40, 100]
+    ];
+
+    ctx.strokeStyle = '#475569';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    path.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    ctx.stroke();
+
+    // Battery symbol (left)
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(30, 85); ctx.lineTo(50, 85); ctx.stroke(); // long line +
+    ctx.beginPath(); ctx.moveTo(34, 115); ctx.lineTo(46, 115); ctx.stroke(); // short line −
+    ctx.fillStyle = '#ef4444'; ctx.font = 'bold 14px Inter'; ctx.fillText('+', 52, 88);
+    ctx.fillStyle = '#3b82f6'; ctx.fillText('−', 52, 120);
+    ctx.fillStyle = '#fbbf24'; ctx.font = '12px Inter'; ctx.fillText(v + 'V', 15, 105);
+
+    // Resistor symbol (right)
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(350, 60);
+    for (let i = 0; i < 6; i++) {
+      ctx.lineTo(i % 2 === 0 ? 370 : 350, 70 + i * 12);
+    }
+    ctx.lineTo(350, 140);
+    ctx.stroke();
+    ctx.fillStyle = '#ef4444'; ctx.font = '12px Inter'; ctx.fillText(r + 'Ω', 372, 105);
+
+    // Bulb (top)
+    const brightness = Math.min(1, current / 4);
+    ctx.beginPath();
+    ctx.arc(200, 30, 14, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(251, 191, 36, ${brightness})`;
+    ctx.fill();
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    if (brightness > 0.3) {
+      ctx.shadowBlur = 20 * brightness;
+      ctx.shadowColor = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(200, 30, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // Electrons moving along path
+    const speed = current * 0.004;
+    const totalLen = calcPathLen(path);
+    dots.forEach(d => {
+      d.t = (d.t + speed) % 1;
+      const pos = getPointOnPath(path, d.t, totalLen);
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#60a5fa';
+      ctx.fill();
+    });
+
+    requestAnimationFrame(draw);
+  }
+
+  function calcPathLen(pts) {
+    let len = 0;
+    for (let i = 1; i < pts.length; i++) {
+      len += Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]);
+    }
+    return len;
+  }
+
+  function getPointOnPath(pts, t, totalLen) {
+    let target = t * totalLen;
+    for (let i = 1; i < pts.length; i++) {
+      const segLen = Math.hypot(pts[i][0] - pts[i-1][0], pts[i][1] - pts[i-1][1]);
+      if (target <= segLen) {
+        const frac = target / segLen;
+        return {
+          x: pts[i-1][0] + (pts[i][0] - pts[i-1][0]) * frac,
+          y: pts[i-1][1] + (pts[i][1] - pts[i-1][1]) * frac,
+        };
+      }
+      target -= segLen;
+    }
+    return { x: pts[0][0], y: pts[0][1] };
+  }
+
+  draw();
+
+  setTimeout(() => {
+    renderQuiz($('#quiz-area-4'), [
+      { q: 'If V=12 and R=4, what is I?', opts: ['48A', '3A', '8A', '16A'], answer: 1 },
+      { q: "Ohm's Law is...", opts: ['V = I + R', 'V = I × R', 'V = I / R', 'V = R / I'], answer: 1 },
+      { q: 'If you double the resistance (same voltage), current...', opts: ['Doubles', 'Halves', 'Stays same', 'Goes to zero'], answer: 1 },
+    ], 4);
+  }, 200);
+};
+
+// ── LEVEL 5: Circuits ────────────────────────────────────────────
+levelRenderers[5] = function($el) {
+  $el.html(`
+    <div class="mb-6 flex items-center justify-between">
+      <h2 class="text-2xl font-bold">🔌 Series & Parallel Circuits</h2>
+      <button class="text-sm text-slate-400 hover:text-white" onclick="$('#level-content').hide()">✕ Close</button>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6 mb-8">
+      <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+        <h3 class="font-semibold text-amber-400 mb-2">Series Circuit</h3>
+        <p class="text-sm text-slate-400 mb-3">Components are in a <strong>single loop</strong> — like a train on one track. If one bulb breaks, they ALL go out (think old Christmas lights).</p>
+        <canvas id="series-canvas" width="320" height="180" class="sim-canvas w-full mb-2"></canvas>
+        <div class="flex items-center gap-2">
+          <label class="text-xs text-slate-400">Bulbs:</label>
+          <button class="bg-slate-700 px-3 py-1 rounded text-sm" id="series-minus">−</button>
+          <span class="font-bold text-amber-400" id="series-count">2</span>
+          <button class="bg-slate-700 px-3 py-1 rounded text-sm" id="series-plus">+</button>
+          <span class="text-xs text-slate-400 ml-2">Total R = <span id="series-r">2</span>Ω</span>
+        </div>
+        <ul class="text-xs text-slate-500 mt-2 space-y-1">
+          <li>• Same current through all components</li>
+          <li>• Voltage is split between components</li>
+          <li>• Total R = R₁ + R₂ + R₃ ...</li>
+        </ul>
+      </div>
+      <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+        <h3 class="font-semibold text-amber-400 mb-2">Parallel Circuit</h3>
+        <p class="text-sm text-slate-400 mb-3">Components are on <strong>separate paths</strong> — like multiple lanes on a highway. If one bulb breaks, the others stay on (your house!).</p>
+        <canvas id="parallel-canvas" width="320" height="180" class="sim-canvas w-full mb-2"></canvas>
+        <div class="flex items-center gap-2">
+          <label class="text-xs text-slate-400">Paths:</label>
+          <button class="bg-slate-700 px-3 py-1 rounded text-sm" id="para-minus">−</button>
+          <span class="font-bold text-amber-400" id="para-count">2</span>
+          <button class="bg-slate-700 px-3 py-1 rounded text-sm" id="para-plus">+</button>
+          <span class="text-xs text-slate-400 ml-2">Total R = <span id="para-r">0.5</span>Ω</span>
+        </div>
+        <ul class="text-xs text-slate-500 mt-2 space-y-1">
+          <li>• Same voltage across all paths</li>
+          <li>• Current is split between paths</li>
+          <li>• 1/R_total = 1/R₁ + 1/R₂ ...</li>
+        </ul>
+      </div>
+    </div>
+
+    <div id="quiz-area-5"></div>
+  `);
+
+  // Series
+  let seriesN = 2;
+  const sCan = document.getElementById('series-canvas');
+  const sCtx = sCan.getContext('2d');
+  let sDots = [];
+  for (let i = 0; i < 30; i++) sDots.push({ t: Math.random() });
+
+  $('#series-plus').click(() => { if (seriesN < 5) { seriesN++; $('#series-count').text(seriesN); $('#series-r').text(seriesN); } });
+  $('#series-minus').click(() => { if (seriesN > 1) { seriesN--; $('#series-count').text(seriesN); $('#series-r').text(seriesN); } });
+
+  function drawSeries() {
+    sCtx.clearRect(0, 0, 320, 180);
+    const current = 6 / seriesN;
+    const brightness = Math.min(1, current / 5);
+
+    // Circuit loop
+    const pts = [[20, 90], [20, 20], [300, 20], [300, 90], [300, 160], [20, 160], [20, 90]];
+    sCtx.strokeStyle = '#475569';
+    sCtx.lineWidth = 4;
+    sCtx.beginPath();
+    pts.forEach(([x, y], i) => i === 0 ? sCtx.moveTo(x, y) : sCtx.lineTo(x, y));
+    sCtx.stroke();
+
+    // Battery
+    sCtx.fillStyle = '#94a3b8'; sCtx.font = '10px Inter'; sCtx.fillText('6V', 6, 95);
+
+    // Bulbs on top segment
+    const spacing = 280 / (seriesN + 1);
+    for (let i = 0; i < seriesN; i++) {
+      const bx = 20 + spacing * (i + 1);
+      sCtx.beginPath();
+      sCtx.arc(bx, 20, 10, 0, Math.PI * 2);
+      sCtx.fillStyle = `rgba(251, 191, 36, ${brightness})`;
+      sCtx.fill();
+      sCtx.strokeStyle = '#94a3b8'; sCtx.lineWidth = 1.5; sCtx.stroke();
+      sCtx.fillStyle = '#94a3b8'; sCtx.font = '8px Inter'; sCtx.textAlign = 'center';
+      sCtx.fillText((6/seriesN).toFixed(1)+'V', bx, 6);
+      sCtx.textAlign = 'left';
+    }
+
+    // Electrons
+    const speed = current * 0.003;
+    const totalLen = calcPathLen(pts);
+    sDots.forEach(d => {
+      d.t = (d.t + speed) % 1;
+      const p = getPointOnPath(pts, d.t, totalLen);
+      sCtx.beginPath();
+      sCtx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      sCtx.fillStyle = '#60a5fa';
+      sCtx.fill();
+    });
+
+    requestAnimationFrame(drawSeries);
+  }
+
+  function calcPathLen(pts) {
+    let l = 0;
+    for (let i = 1; i < pts.length; i++) l += Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
+    return l;
+  }
+  function getPointOnPath(pts, t, tl) {
+    let target = t * tl;
+    for (let i = 1; i < pts.length; i++) {
+      const sl = Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
+      if (target <= sl) { const f = target/sl; return { x: pts[i-1][0]+(pts[i][0]-pts[i-1][0])*f, y: pts[i-1][1]+(pts[i][1]-pts[i-1][1])*f }; }
+      target -= sl;
+    }
+    return { x: pts[0][0], y: pts[0][1] };
+  }
+
+  drawSeries();
+
+  // Parallel
+  let paraN = 2;
+  const pCan = document.getElementById('parallel-canvas');
+  const pCtx = pCan.getContext('2d');
+  let pDots = [];
+  for (let i = 0; i < 40; i++) pDots.push({ t: Math.random(), path: Math.floor(Math.random() * 4) });
+
+  $('#para-plus').click(() => { if (paraN < 4) { paraN++; $('#para-count').text(paraN); $('#para-r').text((1/paraN).toFixed(2)); } });
+  $('#para-minus').click(() => { if (paraN > 1) { paraN--; $('#para-count').text(paraN); $('#para-r').text((1/paraN).toFixed(2)); } });
+
+  function drawParallel() {
+    pCtx.clearRect(0, 0, 320, 180);
+
+    // Main rails
+    pCtx.strokeStyle = '#475569'; pCtx.lineWidth = 4;
+    pCtx.beginPath(); pCtx.moveTo(40, 10); pCtx.lineTo(40, 170); pCtx.stroke();
+    pCtx.beginPath(); pCtx.moveTo(280, 10); pCtx.lineTo(280, 170); pCtx.stroke();
+
+    // Battery
+    pCtx.fillStyle = '#94a3b8'; pCtx.font = '10px Inter'; pCtx.fillText('6V', 10, 95);
+
+    // Paths
+    const spacing = 160 / (paraN + 1);
+    for (let i = 0; i < paraN; i++) {
+      const py = 10 + spacing * (i + 1);
+      pCtx.strokeStyle = '#475569'; pCtx.lineWidth = 3;
+      pCtx.beginPath(); pCtx.moveTo(40, py); pCtx.lineTo(280, py); pCtx.stroke();
+
+      // Bulb
+      pCtx.beginPath(); pCtx.arc(160, py, 10, 0, Math.PI * 2);
+      pCtx.fillStyle = 'rgba(251, 191, 36, 0.8)';
+      pCtx.fill(); pCtx.strokeStyle = '#94a3b8'; pCtx.lineWidth = 1.5; pCtx.stroke();
+    }
+
+    // Electrons
+    const speed = 0.015;
+    pDots.forEach(d => {
+      if (d.path >= paraN) d.path = d.path % paraN;
+      d.t = (d.t + speed) % 1;
+      const py = 10 + spacing * (d.path + 1);
+      const x = 40 + d.t * 240;
+      pCtx.beginPath(); pCtx.arc(x, py, 3, 0, Math.PI * 2);
+      pCtx.fillStyle = '#60a5fa'; pCtx.fill();
+    });
+
+    requestAnimationFrame(drawParallel);
+  }
+  drawParallel();
+
+  setTimeout(() => {
+    renderQuiz($('#quiz-area-5'), [
+      { q: 'In a series circuit, if one bulb breaks...', opts: ['Others get brighter', 'All go out', 'Nothing happens', 'Others dim'], answer: 1 },
+      { q: 'In parallel, adding more paths makes total resistance...', opts: ['Go up', 'Go down', 'Stay same', 'Double'], answer: 1 },
+      { q: 'Your house uses mostly which type?', opts: ['Series', 'Parallel', 'Neither', 'Alternating'], answer: 1 },
+    ], 5);
+  }, 200);
+};
+
+// ── LEVEL 6: Power ───────────────────────────────────────────────
+levelRenderers[6] = function($el) {
+  $el.html(`
+    <div class="mb-6 flex items-center justify-between">
+      <h2 class="text-2xl font-bold">💡 Electrical Power</h2>
+      <button class="text-sm text-slate-400 hover:text-white" onclick="$('#level-content').hide()">✕ Close</button>
+    </div>
+
+    <div class="text-center mb-6">
+      <div class="inline-block bg-slate-800 border-2 border-amber-500/50 rounded-2xl px-8 py-6">
+        <div class="text-4xl font-black text-amber-400 mb-2">P = V × I</div>
+        <div class="text-sm text-slate-400">Power (Watts) = Voltage × Current</div>
+      </div>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6 mb-8">
+      <div>
+        <h3 class="font-semibold text-amber-400 mb-2">Power = Energy per second</h3>
+        <p class="text-slate-300 text-sm leading-relaxed mb-3">
+          Power tells you how much <strong>energy</strong> is being used every second. A 60W bulb uses 60 Joules of energy per second.
+        </p>
+        <ul class="text-sm text-slate-400 space-y-2">
+          <li><strong class="text-amber-300">Power (P)</strong> — measured in <em>Watts (W)</em></li>
+          <li>Your electricity bill is in <strong>kilowatt-hours (kWh)</strong> — power × time</li>
+          <li>LED bulb: ~10W. Microwave: ~1000W. Electric car charger: ~7000W</li>
+          <li>Also: P = I²×R or P = V²/R (using Ohm's Law)</li>
+        </ul>
+      </div>
+      <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+        <h3 class="font-semibold text-sm mb-3">🎮 Power Calculator & Cost Estimator</h3>
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="text-xs text-slate-400">Voltage (V)</label>
+            <input type="range" min="1" max="240" value="120" id="pow-v" class="w-full">
+            <div class="text-center text-xs text-amber-400 font-bold"><span id="pow-v-val">120</span>V</div>
+          </div>
+          <div>
+            <label class="text-xs text-slate-400">Current (A)</label>
+            <input type="range" min="0.1" max="20" value="0.5" step="0.1" id="pow-i" class="w-full">
+            <div class="text-center text-xs text-blue-400 font-bold"><span id="pow-i-val">0.5</span>A</div>
+          </div>
+        </div>
+        <div class="text-center p-3 bg-slate-900 rounded-lg">
+          <div class="text-2xl font-black text-amber-400" id="pow-result">60W</div>
+          <div class="text-xs text-slate-400 mt-1">That's like a <span id="pow-equiv">standard light bulb</span></div>
+          <div class="text-xs text-green-400 mt-1" id="pow-cost"></div>
+        </div>
+
+        <!-- Lightbulb viz -->
+        <div class="flex justify-center mt-4">
+          <svg width="80" height="100" id="pow-bulb">
+            <ellipse cx="40" cy="40" rx="30" ry="35" fill="#334155" stroke="#94a3b8" stroke-width="2" id="bulb-glass"/>
+            <rect x="28" y="70" width="24" height="25" rx="3" fill="#94a3b8"/>
+            <line x1="35" y1="75" x2="35" y2="90" stroke="#64748b" stroke-width="2"/>
+            <line x1="45" y1="75" x2="45" y2="90" stroke="#64748b" stroke-width="2"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div id="quiz-area-6"></div>
+  `);
+
+  function updatePower() {
+    const v = +$('#pow-v').val();
+    const i = +$('#pow-i').val();
+    const p = v * i;
+    $('#pow-v-val').text(v);
+    $('#pow-i-val').text(i);
+    $('#pow-result').text(p >= 1000 ? (p/1000).toFixed(1) + 'kW' : Math.round(p) + 'W');
+
+    // Equivalents
+    let eq = '';
+    if (p < 15) eq = 'an LED bulb';
+    else if (p < 80) eq = 'a standard light bulb';
+    else if (p < 200) eq = 'a TV';
+    else if (p < 500) eq = 'a desktop computer';
+    else if (p < 1500) eq = 'a microwave';
+    else if (p < 3000) eq = 'an electric heater';
+    else eq = 'an electric car charger';
+    $('#pow-equiv').text(eq);
+
+    // Cost estimate (assuming $0.12/kWh)
+    const daily = (p / 1000) * 24 * 0.12;
+    const monthly = daily * 30;
+    $('#pow-cost').text(`≈ $${daily.toFixed(2)}/day · $${monthly.toFixed(1)}/month if on 24/7`);
+
+    // Bulb brightness
+    const brightness = Math.min(1, p / 200);
+    const bulbColor = `rgba(251, 191, 36, ${brightness})`;
+    $('#bulb-glass').attr('fill', bulbColor);
+    if (brightness > 0.3) {
+      $('#pow-bulb ellipse').attr('filter', '');
+    }
+  }
+
+  $('#pow-v, #pow-i').on('input', updatePower);
+  updatePower();
+
+  setTimeout(() => {
+    renderQuiz($('#quiz-area-6'), [
+      { q: 'Power is measured in...', opts: ['Volts', 'Amps', 'Watts', 'Ohms'], answer: 2 },
+      { q: 'If V=120 and I=10, power is...', opts: ['12W', '130W', '1200W', '1.2W'], answer: 2 },
+      { q: 'Your electricity bill measures energy in...', opts: ['Watts', 'Kilowatt-hours', 'Amps', 'Volts'], answer: 1 },
+    ], 6);
+  }, 200);
+};
+
+// ── LEVEL 7: AC vs DC ────────────────────────────────────────────
+levelRenderers[7] = function($el) {
+  $el.html(`
+    <div class="mb-6 flex items-center justify-between">
+      <h2 class="text-2xl font-bold">〰️ AC vs DC</h2>
+      <button class="text-sm text-slate-400 hover:text-white" onclick="$('#level-content').hide()">✕ Close</button>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6 mb-8">
+      <div class="bg-slate-800/50 border border-blue-500/30 rounded-xl p-5">
+        <h3 class="font-semibold text-blue-400 mb-2">DC — Direct Current</h3>
+        <p class="text-sm text-slate-400 mb-3">Electrons flow in <strong>one direction</strong>, steady and constant. Like a river flowing downhill.</p>
+        <canvas id="dc-canvas" width="300" height="120" class="sim-canvas w-full mb-2"></canvas>
+        <ul class="text-xs text-slate-500 space-y-1">
+          <li>• Batteries, solar panels, USB</li>
+          <li>• Simple, steady flow</li>
+          <li>• Hard to transmit over long distances</li>
+        </ul>
+      </div>
+      <div class="bg-slate-800/50 border border-amber-500/30 rounded-xl p-5">
+        <h3 class="font-semibold text-amber-400 mb-2">AC — Alternating Current</h3>
+        <p class="text-sm text-slate-400 mb-3">Electrons <strong>oscillate back and forth</strong>, switching direction 50-60 times per second. Like a wave.</p>
+        <canvas id="ac-canvas" width="300" height="120" class="sim-canvas w-full mb-2"></canvas>
+        <ul class="text-xs text-slate-500 space-y-1">
+          <li>• Wall outlets, power grid</li>
+          <li>• Voltage can be easily transformed (step up/down)</li>
+          <li>• Efficient for long-distance transmission</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5 mb-8">
+      <h3 class="font-semibold text-amber-400 mb-3">🎮 Waveform Playground</h3>
+      <p class="text-xs text-slate-400 mb-3">Adjust frequency and amplitude to see how AC waves change.</p>
+      <canvas id="wave-canvas" width="500" height="180" class="sim-canvas w-full mb-3"></canvas>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <div class="text-xs text-slate-400">Frequency: <span id="wave-freq">60</span> Hz</div>
+          <input type="range" min="10" max="120" value="60" id="freq-slider" class="w-full">
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">Amplitude: <span id="wave-amp">120</span>V</div>
+          <input type="range" min="10" max="240" value="120" id="amp-slider" class="w-full">
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-slate-800/50 border border-slate-700 rounded-xl p-5 mb-8">
+      <h3 class="font-semibold text-amber-400 mb-3">Why AC won the "War of Currents"</h3>
+      <p class="text-sm text-slate-400">In the 1880s, Edison (DC) and Tesla/Westinghouse (AC) battled over which system would power America. <strong>AC won</strong> because transformers can easily step voltage up for long-distance transmission (less energy lost) and step it back down for safe home use. Your phone charger converts AC from the wall to DC for the battery!</p>
+    </div>
+
+    <div id="quiz-area-7"></div>
+  `);
+
+  // DC canvas
+  const dcCan = document.getElementById('dc-canvas');
+  const dcCtx = dcCan.getContext('2d');
+  let dcDots = [];
+  for (let i = 0; i < 15; i++) dcDots.push({ x: Math.random() * 300 });
+
+  function drawDC() {
+    dcCtx.clearRect(0, 0, 300, 120);
+    // Flat line
+    dcCtx.strokeStyle = '#3b82f6'; dcCtx.lineWidth = 2;
+    dcCtx.beginPath(); dcCtx.moveTo(0, 60); dcCtx.lineTo(300, 60); dcCtx.stroke();
+    // Arrow
+    dcCtx.fillStyle = '#3b82f6';
+    dcCtx.beginPath(); dcCtx.moveTo(290, 50); dcCtx.lineTo(300, 60); dcCtx.lineTo(290, 70); dcCtx.fill();
+
+    // Dots moving right
+    dcDots.forEach(d => {
+      d.x = (d.x + 2) % 300;
+      dcCtx.beginPath(); dcCtx.arc(d.x, 60, 4, 0, Math.PI * 2);
+      dcCtx.fillStyle = '#60a5fa'; dcCtx.fill();
+    });
+
+    dcCtx.fillStyle = '#64748b'; dcCtx.font = '10px Inter';
+    dcCtx.fillText('→ steady flow →', 110, 100);
+    requestAnimationFrame(drawDC);
+  }
+  drawDC();
+
+  // AC canvas
+  const acCan = document.getElementById('ac-canvas');
+  const acCtx = acCan.getContext('2d');
+  let acTime = 0;
+
+  function drawAC() {
+    acCtx.clearRect(0, 0, 300, 120);
+    acTime += 0.05;
+
+    acCtx.strokeStyle = '#fbbf24'; acCtx.lineWidth = 2;
+    acCtx.beginPath();
+    for (let x = 0; x < 300; x++) {
+      const y = 60 + Math.sin((x / 30) + acTime) * 40;
+      x === 0 ? acCtx.moveTo(x, y) : acCtx.lineTo(x, y);
+    }
+    acCtx.stroke();
+
+    // Center line
+    acCtx.strokeStyle = '#334155'; acCtx.lineWidth = 1;
+    acCtx.beginPath(); acCtx.moveTo(0, 60); acCtx.lineTo(300, 60); acCtx.stroke();
+
+    acCtx.fillStyle = '#64748b'; acCtx.font = '10px Inter';
+    acCtx.fillText('↔ oscillating ↔', 110, 110);
+    requestAnimationFrame(drawAC);
+  }
+  drawAC();
+
+  // Wave playground
+  const wCan = document.getElementById('wave-canvas');
+  const wCtx = wCan.getContext('2d');
+  let wTime = 0;
+
+  function drawWave() {
+    const freq = +$('#freq-slider').val();
+    const amp = +$('#amp-slider').val();
+    $('#wave-freq').text(freq);
+    $('#wave-amp').text(amp);
+
+    wCtx.clearRect(0, 0, 500, 180);
+    wTime += 0.03;
+
+    // Grid
+    wCtx.strokeStyle = '#1e293b'; wCtx.lineWidth = 1;
+    for (let y = 0; y < 180; y += 30) { wCtx.beginPath(); wCtx.moveTo(0, y); wCtx.lineTo(500, y); wCtx.stroke(); }
+    wCtx.strokeStyle = '#334155'; wCtx.lineWidth = 1;
+    wCtx.beginPath(); wCtx.moveTo(0, 90); wCtx.lineTo(500, 90); wCtx.stroke();
+
+    // Wave
+    const ampScale = (amp / 240) * 70;
+    const freqScale = freq / 30;
+    wCtx.strokeStyle = '#fbbf24'; wCtx.lineWidth = 2.5;
+    wCtx.beginPath();
+    for (let x = 0; x < 500; x++) {
+      const y = 90 + Math.sin((x / 50) * freqScale + wTime * (freq / 30)) * ampScale;
+      x === 0 ? wCtx.moveTo(x, y) : wCtx.lineTo(x, y);
+    }
+    wCtx.stroke();
+
+    // Labels
+    wCtx.fillStyle = '#94a3b8'; wCtx.font = '10px Inter';
+    wCtx.fillText('+' + amp + 'V', 5, 20);
+    wCtx.fillText('0V', 5, 88);
+    wCtx.fillText('−' + amp + 'V', 5, 175);
+
+    requestAnimationFrame(drawWave);
+  }
+  drawWave();
+
+  setTimeout(() => {
+    renderQuiz($('#quiz-area-7'), [
+      { q: 'A battery produces which type of current?', opts: ['AC', 'DC', 'Both', 'Neither'], answer: 1 },
+      { q: 'Your wall outlet provides...', opts: ['DC', 'AC', 'Neither', 'Solar'], answer: 1 },
+      { q: 'AC won because it can be easily...', opts: ['Stored', 'Colored', 'Transformed to different voltages', 'Eaten'], answer: 2 },
+    ], 7);
+  }, 200);
+};
+
+// ─── Init ────────────────────────────────────────────────────────
+$(function() {
+  updateHUD();
+  renderMap();
+});
+</script>
+</body>
+</html>
